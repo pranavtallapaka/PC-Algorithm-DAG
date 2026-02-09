@@ -1,8 +1,5 @@
 from manim import *
 
-# -------------------------------------------------
-# Shared DAG layout
-# -------------------------------------------------
 def make_cancer_nodes():
     pollution = Rectangle(width=2.8, height=1.2).shift(UP*3 + LEFT*4)
     smoker = Rectangle(width=2.8, height=1.2).shift(UP*3 + RIGHT*4)
@@ -25,14 +22,8 @@ def make_cancer_nodes():
 
     return boxes, labels
 
-# -------------------------------------------------
-# Scene 1: PC Algorithm (Skeleton + Limitations)
-# -------------------------------------------------
 class PCSkeletonExplanation(Scene):
     def construct(self):
-        # -----------------------------
-        # Node positions (clean layout)
-        # -----------------------------
         positions = {
             "Pollution": LEFT * 4 + UP * 1,
             "Smoker": LEFT * 4 + DOWN * 1,
@@ -49,18 +40,11 @@ class PCSkeletonExplanation(Scene):
             name: Text(name, font_size=28).next_to(nodes[name], DOWN)
             for name in nodes
         }
-<<<<<<< HEAD
 
-        # -----------------------------
-        # Title
-        # -----------------------------
         title = Text("PC Algorithm: Skeleton & Edge Orientation", font_size=40)
         title.to_edge(UP)
         self.play(Write(title))
 
-        # -----------------------------
-        # Show nodes
-        # -----------------------------
         self.play(
             *[FadeIn(nodes[n]) for n in nodes],
             *[Write(labels[n]) for n in labels]
@@ -68,9 +52,6 @@ class PCSkeletonExplanation(Scene):
 
         self.wait(1)
 
-        # -----------------------------
-        # Step 1: Skeleton (undirected)
-        # -----------------------------
         skeleton_edges = [
             Line(nodes["Pollution"].get_center(), nodes["Cancer"].get_center()),
             Line(nodes["Smoker"].get_center(), nodes["Cancer"].get_center()),
@@ -87,9 +68,6 @@ class PCSkeletonExplanation(Scene):
         self.play(*[Create(e) for e in skeleton_edges])
         self.wait(2)
 
-        # -----------------------------
-        # Conditional Independence Example
-        # -----------------------------
         self.play(FadeOut(skeleton_text))
 
         ci_title = Text(
@@ -131,9 +109,6 @@ class PCSkeletonExplanation(Scene):
             FadeOut(ci_title)
         )
 
-        # -----------------------------
-        # Step 2: Orient identifiable edges
-        # -----------------------------
         self.play(FadeOut(skeleton_text))
 
         orient_text = Text(
@@ -164,9 +139,6 @@ class PCSkeletonExplanation(Scene):
 
         self.wait(2)
 
-        # -----------------------------
-        # Step 3: Highlight ambiguity
-        # -----------------------------
         self.play(FadeOut(orient_text))
 
         ambiguity_text = Text(
@@ -182,9 +154,6 @@ class PCSkeletonExplanation(Scene):
 
         self.wait(2)
 
-        # -----------------------------
-        # Explanation
-        # -----------------------------
         explanation = Text(
             "PC cannot orient these edges due to Markov equivalence:\n"
             "multiple DAGs encode the same conditional independencies",
@@ -196,14 +165,8 @@ class PCSkeletonExplanation(Scene):
         self.wait(3)
 
 
-# -------------------------------------------------
-# Scene 2: PC + Likelihood (Score-Based Orientation)
-# -------------------------------------------------
 class PCPlusLikelihoodExplanation(Scene):
     def construct(self):
-        # -----------------------------
-        # Node layout (same as PC scene)
-        # -----------------------------
         positions = {
             "Pollution": LEFT * 4 + UP * 1,
             "Smoker": LEFT * 4 + DOWN * 1,
@@ -220,26 +183,16 @@ class PCPlusLikelihoodExplanation(Scene):
             name: Text(name, font_size=28).next_to(nodes[name], DOWN)
             for name in nodes
         }
-
-        # -----------------------------
-        # Title
-        # -----------------------------
+        
         title = Text("PC + Likelihood: Resolving Ambiguous Edges", font_size=40)
         title.to_edge(UP)
         self.play(Write(title))
 
-        # -----------------------------
-        # Nodes
-        # -----------------------------
         self.play(
             *[FadeIn(nodes[n]) for n in nodes],
             *[Write(labels[n]) for n in labels]
         )
 
-<<<<<<< HEAD
-        # -----------------------------
-        # Initial CPDAG from PC
-        # -----------------------------
         edges = {
             "P_C": Arrow(nodes["Pollution"].get_center(), nodes["Cancer"].get_center(), buff=0.4),
             "S_C": Arrow(nodes["Smoker"].get_center(), nodes["Cancer"].get_center(), buff=0.4),
@@ -256,9 +209,6 @@ class PCPlusLikelihoodExplanation(Scene):
         self.play(Write(text))
         self.wait(2)
 
-        # -----------------------------
-        # Introduce likelihood idea
-        # -----------------------------
         new_text = Text(
             "Likelihood scoring compares candidate DAGs\nthat share the same skeleton",
             font_size=28,
@@ -267,9 +217,6 @@ class PCPlusLikelihoodExplanation(Scene):
         self.play(Transform(text, new_text))
         self.wait(2)
 
-        # -----------------------------
-        # Resolve Cancer → Xray
-        # -----------------------------
         arrow_cx = Arrow(
             nodes["Cancer"].get_center(),
             nodes["Xray"].get_center(),
@@ -286,9 +233,6 @@ class PCPlusLikelihoodExplanation(Scene):
         self.play(Transform(text, resolve_text_1))
         self.wait(2)
 
-        # -----------------------------
-        # Resolve Cancer → Dyspnoea
-        # -----------------------------
         arrow_cd = Arrow(
             nodes["Cancer"].get_center(),
             nodes["Dyspnoea"].get_center(),
@@ -305,9 +249,6 @@ class PCPlusLikelihoodExplanation(Scene):
         self.play(Transform(text, resolve_text_2))
         self.wait(2)
 
-        # -----------------------------
-        # Final message
-        # -----------------------------
         final_text = Text(
             "PC + Likelihood recovers a fully directed DAG",
             font_size=30
