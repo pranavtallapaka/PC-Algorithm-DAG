@@ -1,6 +1,5 @@
 from manim import *
 
-
 # -------------------------------------------------
 # Shared DAG layout
 # -------------------------------------------------
@@ -26,7 +25,6 @@ def make_cancer_nodes():
 
     return boxes, labels
 
-
 # -------------------------------------------------
 # Scene 1: PC Algorithm (Skeleton + Limitations)
 # -------------------------------------------------
@@ -51,6 +49,7 @@ class PCSkeletonExplanation(Scene):
             name: Text(name, font_size=28).next_to(nodes[name], DOWN)
             for name in nodes
         }
+<<<<<<< HEAD
 
         # -----------------------------
         # Title
@@ -237,6 +236,7 @@ class PCPlusLikelihoodExplanation(Scene):
             *[Write(labels[n]) for n in labels]
         )
 
+<<<<<<< HEAD
         # -----------------------------
         # Initial CPDAG from PC
         # -----------------------------
