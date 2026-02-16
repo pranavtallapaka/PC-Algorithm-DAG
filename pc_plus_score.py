@@ -2,37 +2,67 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
+import time
+
 from pgmpy.readwrite import BIFReader
 from pgmpy.sampling import BayesianModelSampling
 from pgmpy.models import BayesianNetwork
 from pgmpy.estimators import MaximumLikelihoodEstimator
+
 from causallearn.search.ConstraintBased.PC import pc
 from causallearn.utils.cit import chisq
 from sklearn.preprocessing import LabelEncoder
 
+def shd(dag_pred, dag_true):
+    """
+    Structural Hamming Distance:
+    Counts number of edge additions, removals, and direction errors.
+    """
+    return int(np.sum(np.abs(dag_pred - dag_true)))
+
+
 def log_likelihood(data, edges):
     model = BayesianNetwork(edges)
     model.fit(data, estimator=MaximumLikelihoodEstimator)
+    return model.log_likelihood(data)
 
-    ll = 0.0
-    for _, row in data.iterrows():
-        ll += model.log_probability(row.to_dict())
-    return ll
+
+def edges_to_numpy_adj(edges, nodes):
+    idx = {node: i for i, node in enumerate(nodes)}
+    A = np.zeros((len(nodes), len(nodes)), dtype=np.int32)
+
+    for u, v in edges:
+        A[idx[u], idx[v]] = 1
+
+    return A
+
+
+def true_model_to_numpy_adj(model, nodes):
+    idx = {node: i for i, node in enumerate(nodes)}
+    A = np.zeros((len(nodes), len(nodes)), dtype=np.int32)
+
+    for u, v in model.edges():
+        A[idx[u], idx[v]] = 1
+
+    return A
+
 
 def visualize_dag(edges, title="Learned Causal DAG", save_path=None):
+    print("→ Visualizing DAG (close window to continue)")
+
     G = nx.DiGraph()
     G.add_edges_from(edges)
 
     pos = nx.spring_layout(G, seed=42)
 
-    plt.figure(figsize=(7, 5))
+    plt.figure(figsize=(9, 7))
     nx.draw(
         G,
         pos,
         with_labels=True,
         node_size=2500,
         node_color="lightblue",
-        font_size=11,
+        font_size=9,
         arrowsize=20,
         arrowstyle="->"
     )
@@ -43,87 +73,113 @@ def visualize_dag(edges, title="Learned Causal DAG", save_path=None):
 
     plt.show()
 
-def dag_to_adjacency_matrix(edges, nodes):
-    """
-    Create adjacency matrix A where A[i, j] = 1 if node i -> node j
-    """
-    idx = {node: i for i, node in enumerate(nodes)}
-    A = np.zeros((len(nodes), len(nodes)), dtype=int)
 
-    for u, v in edges:
-        A[idx[u], idx[v]] = 1
+def pc_plus_likelihood(bif_file, n=2000):
 
-    return pd.DataFrame(A, index=nodes, columns=nodes)
+    print("\n===== STARTING PC + LIKELIHOOD PIPELINE =====")
 
-def pc_plus_likelihood(bif_file, n=5000):
-    true_model = BIFReader(bif_file).get_model()
+    print("1️⃣ Loading BIF model")
+    reader = BIFReader(bif_file)
+    true_model = reader.get_model()
+    nodes = list(true_model.nodes())
+    print("Nodes:", nodes)
+
+    print("2️⃣ Sampling data")
     sampler = BayesianModelSampling(true_model)
     data = sampler.forward_sample(size=n, seed=42)
 
     for c in data.columns:
         data[c] = LabelEncoder().fit_transform(data[c])
 
-    nodes = list(data.columns)
+    print("Data shape:", data.shape)
+
+    print("3️⃣ Running PC algorithm")
+    start_time = time.time()
 
     cg = pc(
-        data.to_numpy(),
+        data[nodes].to_numpy(),
         alpha=0.05,
         indep_test=chisq,
         node_names=nodes
     )
 
-    pc_edges = []
+    print("PC completed in", round(time.time() - start_time, 2), "seconds")
+
+    directed_edges = []
+    undirected_edges = []
+
     for e in cg.G.get_graph_edges():
         u = e.get_node1().get_name()
         v = e.get_node2().get_name()
-        pc_edges.append((u, v))
 
-    print("\nPC edges:")
-    for e in pc_edges:
-        print(e)
+        ep1 = e.get_endpoint1().name
+        ep2 = e.get_endpoint2().name
 
-    ambiguous_sets = [
-        {"Cancer", "Xray"},
-        {"Cancer", "Dyspnoea"}
-    ]
+        if ep1 == "TAIL" and ep2 == "ARROW":
+            directed_edges.append((u, v))
+        elif ep1 == "ARROW" and ep2 == "TAIL":
+            directed_edges.append((v, u))
+        else:
+            undirected_edges.append((u, v))
 
-    fixed_edges = [
-        (u, v) for (u, v) in pc_edges
-        if {u, v} not in ambiguous_sets
-    ]
+    print("Directed edges:", directed_edges)
+    print("Undirected edges:", undirected_edges)
 
-    candidates = [
-        fixed_edges + [("Cancer", "Xray"), ("Cancer", "Dyspnoea")],
-        fixed_edges + [("Xray", "Cancer"), ("Dyspnoea", "Cancer")]
-    ]
+    print("4️⃣ Orienting undirected edges using likelihood")
 
-    scores = []
-    for edges in candidates:
+    final_edges = directed_edges.copy()
+
+    for (u, v) in undirected_edges:
+        print(f"   Testing {u} <-> {v}")
+
+        candidate1 = final_edges + [(u, v)]
+        candidate2 = final_edges + [(v, u)]
+
         try:
-            scores.append(log_likelihood(data, edges))
-        except Exception:
-            scores.append(-np.inf)
+            score1 = log_likelihood(data, candidate1)
+        except:
+            score1 = -np.inf
 
-    best_edges = candidates[np.argmax(scores)]
+        try:
+            score2 = log_likelihood(data, candidate2)
+        except:
+            score2 = -np.inf
 
-    print("\nFinal DAG edges (PC + likelihood):")
-    for e in best_edges:
-        print(e)
+        if score1 >= score2:
+            final_edges.append((u, v))
+            print(f"   Chose {u} -> {v}")
+        else:
+            final_edges.append((v, u))
+            print(f"   Chose {v} -> {u}")
 
-    adj_matrix = dag_to_adjacency_matrix(best_edges, nodes)
+    print("Final edges:", final_edges)
 
-    print("\nAdjacency Matrix (rows → columns):")
-    print(adj_matrix)
+    print("5️⃣ Computing SHD")
 
-    adj_matrix.to_csv("pc_cancer_adjacency_matrix.csv")
+    pred_adj = edges_to_numpy_adj(final_edges, nodes)
+    true_adj = true_model_to_numpy_adj(true_model, nodes)
+
+    shd_value = shd(pred_adj, true_adj)
+
+    print("\n===== EVALUATION RESULTS =====")
+    print("SHD:", shd_value)
+
+    print("6️⃣ Saving adjacency matrix")
+
+    adj_df = pd.DataFrame(pred_adj, index=nodes, columns=nodes)
+    adj_df.to_csv("pc_sachs_adjacency_matrix.csv")
+
+    print("7️⃣ Visualizing final DAG")
 
     visualize_dag(
-        best_edges,
-        title="PC + Likelihood Causal DAG",
-        save_path="pc_cancer_final_dag.png"
+        final_edges,
+        title="SACHS: PC + Likelihood DAG",
+        save_path="pc_sachs_final_dag.png"
     )
 
-    return best_edges, adj_matrix
+    print("\n===== PIPELINE COMPLETE =====")
+
+    return final_edges, pred_adj, true_adj
 
 if __name__ == "__main__":
-    pc_plus_likelihood("data/cancer.bif")
+    pc_plus_likelihood("data/sachs.bif", n=2000)
